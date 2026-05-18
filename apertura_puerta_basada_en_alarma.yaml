@@ -1,13 +1,8 @@
 blueprint:
-  name: Desbloqueo automático de puerta (Bermuda Completo + Alarma)
+  name: Desbloqueo automático de puerta (Bermuda Total: ESPHome + Shelly)
   description: >
-    Desbloquea automáticamente la puerta cuando la persona seleccionada entra por primera vez
-    en la zona especificada y, posteriormente, se acerca al radio de cobertura de un proxy Bluetooth.
-
-    Requisitos previos:
-      - La automatización utiliza la integración [Bermuda Triangulation](https://github.com) para obtener el Área de tu dispositivo Bluetooth.
-      - Tu teléfono debe estar configurado para transmitir balizas (beacons) Bluetooth.
-      - (Solo si Telegram está activado) Configura el `person.xxx.telegram_id` utilizando el archivo `customize.yaml`.
+    MÁXIMA SEGURIDAD: Desbloquea la puerta cuando entras en la zona GPS y
+    te aproximas físicamente a menos de los metros seleccionados del proxy de entrada (ESPHome o Shelly).
   domain: automation
   input:
     person:
@@ -18,68 +13,48 @@ blueprint:
           domain: person
     alarm_entity:
       name: Panel de Alarma
-      description: Selecciona tu alarma. Si está armada, la puerta NO se abrirá por seguridad.
+      description: Selecciona tu alarma. Si está armada, la puerta NO se abrirá.
       selector:
         entity:
           domain: alarm_control_panel
-    enable_telegram:
-      name: ¿Activar Telegram?
-      default: false
-      description: >-
-        Si se activa, se enviarán las notificaciones de Telegram. Asegúrate de configurar 
-        primero la integración telegram_bot: https://home-assistant.io
-
-
-        Después, añade un nuevo valor en tu archivo "customize.yaml" para vincular tu ID de usuario de Telegram 
-        a tu entidad de persona en Home Assistant.
-
-
-        person.<<Nombre_De_Tu_Persona>>: { telegram_id: <<Tu_Id_De_Telegram>> }
-      selector:
-        boolean:
-    zone:
-      name: Zona
-      default: zone.home
-      description: La zona geográfica en la que debe entrar la persona (habitualmente Casa).
-      selector:
-        entity:
-          domain: zone
-    coming_home:
-      name: ¿Activar cuando la persona se marque como "En casa"?
-      default: false
-      description: >-
-        Si se marca como verdadero, la automatización también se activará cuando el estado de la persona cambie a "home".
-        Esto es útil si quieres utilizar la conexión Wi-Fi de tu casa como rastreador de presencia.
-      selector:
-        boolean:
     area:
       name: Área (Habitación)
-      description: >
-        El área en la que se debe considerar que está el teléfono.
-        Selecciona el área donde físicamente se encuentra el proxy Bluetooth (o Shelly) de tu puerta de entrada.
+      description: Selecciona el área del proxy Bluetooth de tu puerta de entrada (Cocina).
       selector:
-        area:
-          entity:
-            integration: esphome
+        area: {} # Acepta cualquier integración (ESPHome, Shelly, etc.) que defina esta área
     beacon:
-      name: Baliza Bluetooth (Beacon)
-      description: >
-        Las balizas Bluetooth de Bermuda que deben conectarse al proxy de la entrada.
+      name: Baliza Bluetooth (Sensor de Área)
+      description: Selecciona la entidad que se llama exactamente "Area" de tu iPhone en Bermuda.
       selector:
         entity:
           integration: bermuda
           multiple: true
           domain: sensor
           device_class: bermuda__custom_device_class
+    distance_sensor:
+      name: Sensor de Distancia de Bermuda
+      description: Selecciona la entidad "sensor.iphone_david_bluetooth_distance_to_general_cocina".
+      selector:
+        entity:
+          domain: sensor
+    distance_threshold:
+      name: Umbral de Distancia Máxima (Metros)
+      default: 2.0
+      description: La distancia máxima real a la que debes estar de la puerta para que abra.
+      selector:
+        number:
+          min: 0.5
+          max: 5.0
+          step: 0.1
+          unit_of_measurement: m
+          mode: slider
     timeout:
       name: Tiempo límite tras entrar a la zona
       default:
         hours: 0
         minutes: 10
         seconds: 0
-      description:
-        Si entras en la zona geográfica de casa pero no te acercas a la puerta en este intervalo de tiempo, 
-        la automatización se cancelará.
+      description: Tiempo máximo para llegar a casa desde que el GPS detecta la zona.
       selector:
         duration:
     minimum_beacon_time:
@@ -87,10 +62,8 @@ blueprint:
       default:
         hours: 0
         minutes: 0
-        seconds: 5
-      description: >-
-        El tiempo mínimo que la baliza Bluetooth debe estar conectada de forma continua 
-        al proxy de la entrada para que la puerta se abra (evita aperturas por rebotes de señal).
+        seconds: 3
+      description: Tiempo que debes estar en zona antes de validar la distancia.
       selector:
         duration:
     lock:
@@ -98,6 +71,11 @@ blueprint:
       selector:
         entity:
           domain: lock
+    enable_telegram:
+      name: ¿Activar Telegram?
+      default: false
+      selector:
+        boolean:
 
 mode: single
 
@@ -106,38 +84,33 @@ variables:
   person: !input person
   lock: !input lock
   alarm_entity: !input alarm_entity
+  distance_sensor: !input distance_sensor
+  distance_threshold: !input distance_threshold
 
 trigger:
   - trigger: zone
     entity_id: !input person
     zone: !input zone
     event: enter
-  - trigger: state
-    entity_id:
-      - !input person
-    to: home
-    enabled: !input coming_home
 
 action:
-  # COMPROBACIÓN DE SEGURIDAD: Detener si la alarma NO está desarmada
+  # COMPROBACIÓN DE SEGURIDAD 1: Detener si la alarma está puesta
   - condition: template
     value_template: "{{ is_state(alarm_entity, 'disarmed') }}"
 
+  # Enviar aviso previo por Telegram si está activo
   - action: telegram_bot.send_message
     metadata: {}
     enabled: !input enable_telegram
     response_variable: response
     data:
       target: '{{state_attr(person,"telegram_id")}}'
-      message: >-
-        Te hemos detectado cerca de casa. Si te acercas a la puerta en los próximos 
-        {{ timeout.hours*60 + timeout.minutes }}{% if timeout.seconds != 0 %}:{{ timeout.seconds }}{% endif %} minutos,
-        se abrirá automáticamente.
+      message: "Te hemos detectado cerca de casa. La puerta se abrirá al acercarte."
       one_time_keyboard: true
       inline_keyboard:
         - Cancelar:/cancel,Abrir:/unlock
-  - variables:
-      telegram_edit_text: "Sin información"
+
+  # ESPERA ACTIVA: Espera a que entres en el Área de la cocina
   - wait_for_trigger:
       - trigger: state
         entity_id: !input beacon
@@ -145,54 +118,27 @@ action:
         attribute: area_id
         to: !input area
         for: !input minimum_beacon_time
-      - trigger: event
-        id: unlock_by_telegram
-        event_type: telegram_callback
-        event_data:
-          command: "/unlock"
-          message:
-            chat:
-              id: "{{ response.chats[0].chat_id | int(0) }}"
-            message_id: "{{ response.chats[0].message_id | int(0) }}"
-      - trigger: event
-        id: cancel_by_telegram
-        event_type: telegram_callback
-        event_data:
-          data: "/cancel"
-          message:
-            chat:
-              id: "{{ response.chats[0].chat_id | int(0) }}"
-            message_id: "{{ response.chats[0].message_id | int(0) }}"
     continue_on_timeout: true
     timeout: !input timeout
+
+  # EVALUACIÓN FINAL: Comprobación estricta de metros antes de abrir
   - choose:
       - conditions:
           - condition: template
-            value_template: |
-              {{ wait.trigger.id == "unlock_by_bluetooth_beacon" or 
-                wait.trigger.id == "unlock_by_telegram" }}
+            value_template: "{{ wait.trigger.id == 'unlock_by_bluetooth_beacon' }}"
+          # COMPROBACIÓN DE SEGURIDAD 2: ¿Estás realmente a menos de los metros indicados?
+          - condition: template
+            value_template: "{{ states(distance_sensor) | float(100) < (distance_threshold | float) }}"
         sequence:
-          - variables:
-              telegram_edit_text: "La puerta se ha abierto automáticamente. ¡Bienvenido!"
           - action: lock.unlock
             target:
               entity_id: !input lock
-      - conditions:
-          - condition: template
-            value_template: |
-              {{ wait.trigger.id == "cancel_by_telegram" }}
-        sequence:
-          - variables:
-              telegram_edit_text: "La apertura automática de la puerta ha sido cancelada manualmente."
+          - action: notify.notify
+            data:
+              title: "🔑 Domótica"
+              message: "Puerta abierta automáticamente. Distancia verificada por Bermuda mediante red híbrida."
     default:
-      - variables:
-          telegram_edit_text: >-
-            No se te ha detectado cerca de la puerta en los últimos
-            {{ timeout.hours*60 + timeout.minutes }}{% if timeout.seconds != 0 %}:{{ timeout.seconds }}{% endif %} minutos.
-            Apertura cancelada por seguridad.
-  - action: telegram_bot.edit_message
-    metadata: {}
-    data:
-      chat_id: "{{ response.chats[0].chat_id }}"
-      message_id: "{{ response.chats[0].message_id }}"
-      message: "{{ telegram_edit_text }}"
+      - action: logger.log
+        data:
+          message: "Apertura cancelada: No se cumplió el rango de distancia estricto."
+
