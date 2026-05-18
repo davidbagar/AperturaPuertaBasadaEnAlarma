@@ -1,5 +1,5 @@
 blueprint:
-  name: Desbloqueo automático de puerta (Bermuda Total: ESPHome + Shelly)
+  name: "Desbloqueo automático de puerta (Bermuda Total: ESPHome + Shelly)"
   description: >
     MÁXIMA SEGURIDAD: Desbloquea la puerta cuando entras en la zona GPS y
     te aproximas físicamente a menos de los metros seleccionados del proxy de entrada (ESPHome o Shelly).
@@ -21,7 +21,7 @@ blueprint:
       name: Área (Habitación)
       description: Selecciona el área del proxy Bluetooth de tu puerta de entrada (Cocina).
       selector:
-        area: {} # Acepta cualquier integración (ESPHome, Shelly, etc.) que defina esta área
+        area: {}
     beacon:
       name: Baliza Bluetooth (Sensor de Área)
       description: Selecciona la entidad que se llama exactamente "Area" de tu iPhone en Bermuda.
@@ -140,5 +140,5 @@ action:
     default:
       - action: logger.log
         data:
-          message: "Apertura cancelada: No se cumplió el rango de distancia estricto."
+          message: "Apertura canceled: No se cumplió el rango de distancia estricto."
 
