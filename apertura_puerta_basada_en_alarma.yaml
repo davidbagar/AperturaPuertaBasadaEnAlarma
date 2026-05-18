@@ -142,12 +142,18 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ wait.trigger.id == 'unlock_by_bluetooth_beacon' }}"
-          # LA NUEVA LÓGICA: Si 'enable_distance' es falso, da luz verde directo. Si es verdadero, comprueba los metros.
+          # REPARADO: Corrección de comillas dobles externas para evitar el fallo de renderizado
           - condition: template
             value_template: >-
-              {{ not enable_distance or (states(distance_sensor) | float(100) -
-                Puerta abierta automáticamente. Verificación completada por Bermuda 
-                {% if enable_distance %}(Distancia validada a menos de {{ distance_threshold }}m){% else %}(Filtro de distancia omitido){% endif %}.
+              {{ enable_distance == false or (states(distance_sensor) | float(100) < (distance_threshold | float)) }}
+        sequence:
+          - action: lock.unlock
+            target:
+              entity_id: !input lock
+          - action: notify.notify
+            data:
+              title: "🔑 Domótica"
+              message: "Puerta abierta automáticamente. Verificación completada por Bermuda."
     default:
       - action: logger.log
         data:
