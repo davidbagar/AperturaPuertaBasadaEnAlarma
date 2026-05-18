@@ -17,6 +17,13 @@ blueprint:
       selector:
         entity:
           domain: alarm_control_panel
+    zone:
+      name: Zona
+      default: zone.home
+      description: La zona geográfica en la que debe entrar la persona (habitualmente Casa).
+      selector:
+        entity:
+          domain: zone
     area:
       name: Área (Habitación)
       description: Selecciona el área del proxy Bluetooth de tu puerta de entrada (Cocina).
@@ -83,6 +90,7 @@ variables:
   timeout: !input timeout
   person: !input person
   lock: !input lock
+  zone: !input zone
   alarm_entity: !input alarm_entity
   distance_sensor: !input distance_sensor
   distance_threshold: !input distance_threshold
@@ -140,5 +148,5 @@ action:
     default:
       - action: logger.log
         data:
-          message: "Apertura canceled: No se cumplió el rango de distancia estricto."
+          message: "Apertura cancelada: No se cumplió el rango de distancia estricto."
 
