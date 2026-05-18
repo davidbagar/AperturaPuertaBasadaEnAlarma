@@ -1,8 +1,8 @@
 blueprint:
-  name: "Desbloqueo automático de puerta (Bermuda Total: ESPHome + Shelly)"
+  name: "Desbloqueo automático de puerta (Bermuda Híbrido Avanzado)"
   description: >
     MÁXIMA SEGURIDAD: Desbloquea la puerta cuando entras en la zona GPS y
-    te aproximas físicamente a menos de los metros seleccionados del proxy de entrada (ESPHome o Shelly).
+    te aproximas al proxy de la entrada, con opción de validar la distancia exacta en metros.
   domain: automation
   input:
     person:
@@ -38,16 +38,23 @@ blueprint:
           multiple: true
           domain: sensor
           device_class: bermuda__custom_device_class
+    enable_distance:
+      name: "¿Validar distancia estricta?"
+      default: true
+      description: Si se activa, comprobará que estés a menos de los metros indicados para abrir la puerta.
+      selector:
+        boolean:
     distance_sensor:
       name: Sensor de Distancia de Bermuda
-      description: Selecciona la entidad "sensor.iphone_david_bluetooth_distance_to_general_cocina".
+      description: "Entidad de distancia (ej: sensor.iphone_david_bluetooth_distance_to_general_cocina). Solo obligatorio si activas la validación de distancia."
+      default: []
       selector:
         entity:
           domain: sensor
     distance_threshold:
       name: Umbral de Distancia Máxima (Metros)
       default: 2.0
-      description: La distancia máxima real a la que debes estar de la puerta para que abra.
+      description: Distancia máxima real a la que debes estar de la puerta. Solo aplica si activas la validación.
       selector:
         number:
           min: 0.5
@@ -70,7 +77,7 @@ blueprint:
         hours: 0
         minutes: 0
         seconds: 3
-      description: Tiempo que debes estar en zona antes de validar la distancia.
+      description: Tiempo que debes estar en zona antes de validar el desbloqueo.
       selector:
         duration:
     lock:
@@ -92,6 +99,7 @@ variables:
   lock: !input lock
   zone: !input zone
   alarm_entity: !input alarm_entity
+  enable_distance: !input enable_distance
   distance_sensor: !input distance_sensor
   distance_threshold: !input distance_threshold
 
@@ -118,7 +126,7 @@ action:
       inline_keyboard:
         - Cancelar:/cancel,Abrir:/unlock
 
-  # ESPERA ACTIVA: Espera a que entres en el Área de la cocina
+  # ESPERA ACTIVA: Espera a que entres en el Área de la cocina/entrada
   - wait_for_trigger:
       - trigger: state
         entity_id: !input beacon
@@ -129,24 +137,18 @@ action:
     continue_on_timeout: true
     timeout: !input timeout
 
-  # EVALUACIÓN FINAL: Comprobación estricta de metros antes de abrir
+  # EVALUACIÓN FINAL: Condicional inteligente (Distancia Obligatoria u Opcional)
   - choose:
       - conditions:
           - condition: template
             value_template: "{{ wait.trigger.id == 'unlock_by_bluetooth_beacon' }}"
-          # COMPROBACIÓN DE SEGURIDAD 2: ¿Estás realmente a menos de los metros indicados?
+          # LA NUEVA LÓGICA: Si 'enable_distance' es falso, da luz verde directo. Si es verdadero, comprueba los metros.
           - condition: template
-            value_template: "{{ states(distance_sensor) | float(100) < (distance_threshold | float) }}"
-        sequence:
-          - action: lock.unlock
-            target:
-              entity_id: !input lock
-          - action: notify.notify
-            data:
-              title: "🔑 Domótica"
-              message: "Puerta abierta automáticamente. Distancia verificada por Bermuda mediante red híbrida."
+            value_template: >-
+              {{ not enable_distance or (states(distance_sensor) | float(100) -
+                Puerta abierta automáticamente. Verificación completada por Bermuda 
+                {% if enable_distance %}(Distancia validada a menos de {{ distance_threshold }}m){% else %}(Filtro de distancia omitido){% endif %}.
     default:
       - action: logger.log
         data:
-          message: "Apertura cancelada: No se cumplió el rango de distancia estricto."
-
+          message: "Apertura cancelada: No se cumplieron los requisitos del Blueprint."
