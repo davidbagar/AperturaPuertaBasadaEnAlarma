@@ -142,18 +142,16 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ wait.trigger.id == 'unlock_by_bluetooth_beacon' }}"
-          # REPARADO: Corrección de comillas dobles externas para evitar el fallo de renderizado
           - condition: template
-            value_template: >-
-              {{ enable_distance == false or (states(distance_sensor) | float(100) < (distance_threshold | float)) }}
+            value_template: "{{ enable_distance == false or (states(distance_sensor) | float(100) < (distance_threshold | float)) }}"
         sequence:
           - action: lock.unlock
             target:
               entity_id: !input lock
           - action: notify.notify
             data:
-              title: "🔑 Domótica"
-              message: "Puerta abierta automáticamente. Verificación completada por Bermuda."
+              title: 'Aviso de Acceso'
+              message: 'La apertura automatica ha sido ejecutada por proximidad.'
     default:
       - action: logger.log
         data:
