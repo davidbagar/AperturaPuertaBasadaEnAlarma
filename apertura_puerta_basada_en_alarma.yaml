@@ -1,0 +1,122 @@
+blueprint:
+  name: Desbloqueo automático de puerta (Bermuda + Alarma)
+  description: >
+    Desbloquea automáticamente la puerta cuando la persona seleccionada entra por primera vez
+    en la zona especificada y, posteriormente, se acerca al radio de cobertura de un proxy Bluetooth.
+
+    Requisitos previos:
+      - Utiliza la integración Bermuda para obtener el Área de tu dispositivo Bluetooth.
+      - Tu teléfono debe transmitir balizas (beacons) Bluetooth.
+  domain: automation
+  input:
+    person:
+      name: Persona
+      description: La persona que debe entrar en la zona para iniciar el proceso.
+      selector:
+        entity:
+          domain: person
+    alarm_entity:
+      name: Panel de Alarma
+      description: Selecciona tu alarma. Si está armada, la puerta NO se abrirá por seguridad.
+      selector:
+        entity:
+          domain: alarm_control_panel
+    zone:
+      name: Zona
+      default: zone.home
+      description: La zona geográfica en la que debe entrar la persona (habitualmente Casa).
+      selector:
+        entity:
+          domain: zone
+    coming_home:
+      name: ¿Activar cuando la persona se marque como "En casa"?
+      default: false
+      description: Activar si usas el Wi-Fi como rastreador secundario.
+      selector:
+        boolean:
+    area:
+      name: Área (Habitación)
+      description: Selecciona el área donde está el proxy Bluetooth (o Shelly) de tu puerta de entrada.
+      selector:
+        area:
+          entity:
+            integration: esphome
+    beacon:
+      name: Baliza Bluetooth (Beacon)
+      description: Las balizas Bluetooth de Bermuda que deben conectarse al proxy de la entrada.
+      selector:
+        entity:
+          integration: bermuda
+          multiple: true
+          domain: sensor
+          device_class: bermuda__custom_device_class
+    timeout:
+      name: Tiempo límite tras entrar a la zona
+      default:
+        hours: 0
+        minutes: 10
+        seconds: 0
+      description: Tiempo máximo para llegar a la puerta desde que entras a la zona GPS.
+      selector:
+        duration:
+    minimum_beacon_time:
+      name: Tiempo mínimo de detección
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 5
+      description: Tiempo mínimo que debes estar en el felpudo para que abra (evita falsos rebotes).
+      selector:
+        duration:
+    lock:
+      name: Cerradura
+      selector:
+        entity:
+          domain: lock
+
+mode: single
+
+variables:
+  timeout: !input timeout
+  person: !input person
+  lock: !input lock
+  alarm_entity: !input alarm_entity
+
+trigger:
+  - trigger: zone
+    entity_id: !input person
+    zone: !input zone
+    event: enter
+  - trigger: state
+    entity_id:
+      - !input person
+    to: home
+    enabled: !input coming_home
+
+action:
+  # FILTRO DE SEGURIDAD INTERNO: Comprobamos que la alarma esté desarmada (disarmed)
+  - condition: template
+    value_template: "{{ is_state(alarm_entity, 'disarmed') }}"
+    
+  - wait_for_trigger:
+      - trigger: state
+        entity_id: !input beacon
+        id: unlock_by_bluetooth_beacon
+        attribute: area_id
+        to: !input area
+        for: !input minimum_beacon_time
+    continue_on_timeout: true
+    timeout: !input timeout
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: |
+              {{ wait.trigger.id == "unlock_by_bluetooth_beacon" }}
+        sequence:
+          - action: lock.unlock
+            target:
+              entity_id: !input lock
+          - action: notify.notify
+            data:
+              title: "🔑 Domótica"
+              message: "Puerta de entrada abierta automáticamente mediante Bermuda BLE."
