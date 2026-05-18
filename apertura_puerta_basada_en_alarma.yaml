@@ -149,3 +149,4 @@ action:
       - action: logger.log
         data:
           message: "Apertura cancelada: No se cumplió el rango de distancia estricto."
+
